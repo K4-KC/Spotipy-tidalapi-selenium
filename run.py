@@ -7,12 +7,13 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
+import webbrowser
 
 # ---------- Configuration ----------
 # Spotify credentials (set these as environment variables)
 SPOTIFY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
-SPOTIFY_REDIRECT_URI = os.getenv("SPOTIPY_REDIRECT_URI", "http://localhost:8888/callback")
+SPOTIFY_REDIRECT_URI = os.getenv("SPOTIPY_REDIRECT_URI")
 SPOTIFY_SCOPE = "playlist-read-private"
 
 # Tidal account credentials (use your throwaway email/password)
@@ -20,11 +21,15 @@ TIDAL_EMAIL = os.getenv("TIDAL_EMAIL")
 TIDAL_PASSWORD = os.getenv("TIDAL_PASSWORD")
 
 # The Spotify playlist ID or URI (set as env var SPOTIFY_PLAYLIST_ID)
-PLAYLIST_ID = os.getenv("SPOTIFY_PLAYLIST_ID")
+# PLAYLIST_ID = os.getenv("SPOTIFY_PLAYLIST_ID")
+# suppose user pasted the share URL or ID+query
+raw = "https://open.spotify.com/playlist/0VZ0enNabwuwwHY2rfzSKv?si=01415048a90643e8"
+PLAYLIST_ID = raw.split("?", 1)[0]
 
 # Download directory and rate limiting
-DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", os.path.join(os.getcwd(), "downloads"))
-RATE_LIMIT_SECONDS = int(os.getenv("RATE_LIMIT_SECONDS", "30"))
+# Replace with hard-coded values instead of environment variables:
+DOWNLOAD_DIR = os.path.join(os.path.expanduser("~"), "Downloads")
+RATE_LIMIT_SECONDS = 30  # seconds to wait between downloads
 
 # Ensure download directory exists
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
@@ -33,6 +38,7 @@ os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 options = webdriver.ChromeOptions()
 # To run in headless mode uncomment next line (downloads may require extra setup)
 # options.add_argument("--headless")
+# Set Chrome download directory
 prefs = {"download.default_directory": DOWNLOAD_DIR}
 options.add_experimental_option("prefs", prefs)
 
@@ -58,9 +64,18 @@ def fetch_spotify_tracks():
     return tracks
 
 # ---------- Tidal: Login & Search ----------
+
 def login_tidal():
     session = tidalapi.Session()
-    session.login(TIDAL_EMAIL, TIDAL_PASSWORD)
+    # Initiate the OAuth login process
+    login, future = session.login_oauth()
+    # Open the verification URL in the default web browser
+    webbrowser.open(login.verification_uri_complete)
+    print(f"Please complete the login in your browser: {login.verification_uri_complete}")
+    # Wait for the user to complete the login
+    future.result()
+    if not session.check_login():
+        raise RuntimeError("TIDAL login failed")
     return session
 
 
@@ -77,14 +92,11 @@ def find_tidal_track(session, title, artist):
 def download_with_doubledouble(tidal_url):
     driver.get("https://doubledouble.top")
     time.sleep(5)  # wait for page load (adjust if needed)
-    # Locate URL input (adjust selector if the site changes)
     input_box = driver.find_element(By.NAME, "url")
     input_box.clear()
     input_box.send_keys(tidal_url)
-    # Click the Download button
     download_btn = driver.find_element(By.XPATH, "//button[contains(text(), 'Download')]")
     download_btn.click()
-    # Wait for download to initiate
     time.sleep(10)
 
 # ---------- Main Workflow ----------
@@ -109,7 +121,6 @@ def main():
             print(f"  Not found on Tidal. Logging.")
             not_found.append(f"{title} – {artist}")
 
-    # Write not-found tracks to file
     with open("not_found_tracks.txt", "w", encoding="utf-8") as f:
         for entry in not_found:
             f.write(entry + "\n")
