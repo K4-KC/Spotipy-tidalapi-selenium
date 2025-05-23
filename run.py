@@ -7,7 +7,12 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 import webbrowser
+
+# Point to your Brave browser executable:
+brave_path = r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
 
 # ---------- Configuration ----------
 # Spotify credentials (set these as environment variables)
@@ -39,13 +44,12 @@ options = webdriver.ChromeOptions()
 # To run in headless mode uncomment next line (downloads may require extra setup)
 # options.add_argument("--headless")
 # Set Chrome download directory
-prefs = {"download.default_directory": DOWNLOAD_DIR}
+options.binary_location = brave_path
+prefs = {"download.default_directory": r"C:\Users\kanva\Downloads"}
 options.add_experimental_option("prefs", prefs)
 
-driver = webdriver.Chrome(
-    service=Service(ChromeDriverManager().install()),
-    options=options
-)
+service = Service(ChromeDriverManager().install())
+driver = webdriver.Chrome(service=service, options=options)
 
 # ---------- Spotify: Fetch Playlist Tracks ----------
 def fetch_spotify_tracks():
@@ -91,13 +95,22 @@ def find_tidal_track(session, title, artist):
 # ---------- DoubleDouble: Automate Download ----------
 def download_with_doubledouble(tidal_url):
     driver.get("https://doubledouble.top")
-    time.sleep(5)  # wait for page load (adjust if needed)
-    input_box = driver.find_element(By.NAME, "url")
+
+    # 1) Wait up to 20s for the #dl-input element to appear
+    input_box = WebDriverWait(driver, 20).until(
+        EC.presence_of_element_located((By.ID, "dl-input"))
+    )
+
+    # 2) Paste the Tidal URL into that input
     input_box.clear()
     input_box.send_keys(tidal_url)
-    download_btn = driver.find_element(By.XPATH, "//button[contains(text(), 'Download')]")
+
+    # 3) Click the button with ID dl-button
+    download_btn = driver.find_element(By.ID, "dl-button")
     download_btn.click()
-    time.sleep(10)
+
+    # 4) Give it a moment to start the download
+    time.sleep(RATE_LIMIT_SECONDS)
 
 # ---------- Main Workflow ----------
 def main():
