@@ -46,12 +46,17 @@ error_pos = success_pos
 error_color = (255, 0, 0)  # red color in RGB
 print(f"Error position at {error_pos}")
 
-# List of Tidal song URLs to process (modify or load from file as needed)
-# tidal_links = [
-#     "https://tidal.com/track/422672255",  # example links
-#     "https://tidal.com/track/248133980",
-#     # add more links here...
-# ]
+# Load Tidal song URLs from file
+def load_tidal_links(filename="tidal_links.txt"):
+    try:
+        with open(filename, "r", encoding="utf-8") as f:
+            links = [line.strip() for line in f if line.strip()]
+        return links
+    except FileNotFoundError:
+        print(f"Error: {filename} not found. Please run get_tidal_links.py first to generate the links.")
+        return []
+
+tidal_links = load_tidal_links()
 
 
 
@@ -67,6 +72,13 @@ def is_error_visible(pos, color, tolerance=10):
     x, y = pos
     return pyautogui.pixelMatchesColor(x, y, color, tolerance=tolerance)
 
+# Check if tidal_links were loaded successfully
+if not tidal_links:
+    print("No tidal links found. Please run get_tidal_links.py first to generate the links.")
+    input("Press Enter to exit...")
+    exit()
+
+print(f"Loaded {len(tidal_links)} Tidal links for processing")
 print("Starting automation of links...")
 for link in tidal_links:
     # Click input box, clear any existing text, and type the new link
@@ -77,7 +89,7 @@ for link in tidal_links:
     
     link_downloaded_and_saved = False
     attempts = 0
-    max_attempts = 3
+    max_attempts = 20
     signal_timeout = 300  # seconds to wait for success or error signal
 
     while attempts < max_attempts:
@@ -143,8 +155,10 @@ for link in tidal_links:
     if link_downloaded_and_saved:
         print(f"Successfully processed and saved: {link}")
         # Wait a bit for the download to actually complete on the system
-        time.sleep(5) 
+        time.sleep(1)
     else:
         print(f"Failed to download/save link after {max_attempts} attempts: {link}")
+        with open("not_downloaded_tracks.txt", "a", encoding="utf-8") as f:
+            f.write(link + "\n")
 
 print("Done processing all links.")
