@@ -38,18 +38,44 @@ RATE_LIMIT_SECONDS = 30  # seconds to wait between downloads
 
 # Ensure download directory exists
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+print(f"Downloads will be saved to: {DOWNLOAD_DIR}")
 
 # ---------- Setup Selenium WebDriver ----------
 options = webdriver.ChromeOptions()
 # To run in headless mode uncomment next line (downloads may require extra setup)
 # options.add_argument("--headless")
 # Set Chrome download directory
-options.binary_location = brave_path
-prefs = {"download.default_directory": r"C:\Users\kanva\Downloads"}
+# options.binary_location = brave_path # Removed this line
+prefs = {"download.default_directory": DOWNLOAD_DIR}
 options.add_experimental_option("prefs", prefs)
 
-service = Service(ChromeDriverManager().install())
-driver = webdriver.Chrome(service=service, options=options)
+# Disable extensions and other settings that might cause issues
+options.add_argument("--disable-extensions")
+options.add_argument("--disable-gpu")
+options.add_argument("--no-sandbox")
+options.add_argument("--disable-dev-shm-usage")
+options.add_argument("--enable-logging")
+options.add_argument("--log-level=0")
+
+# Use a separate user data directory for automation to avoid conflicts with running Chrome
+# This allows us to have persistent sessions while not interfering with your main Chrome
+automation_user_data = os.path.join(os.path.expanduser("~"), "ChromeAutomation")
+options.add_argument(f"--user-data-dir={automation_user_data}")
+options.add_argument("--profile-directory=Default")
+
+try:
+    service = Service(ChromeDriverManager().install())
+    driver = webdriver.Chrome(service=service, options=options)
+    print("Chrome opened successfully with automation profile.")
+    print("You can now sign into any accounts you need in this browser window.")
+    print("This profile will persist between script runs.")
+except Exception as e:
+    print(f"Error initializing Chrome WebDriver: {e}")
+    print("Tips to fix:")
+    print("1. Make sure Chrome browser is not already running")
+    print("2. Check if Chrome browser is installed")
+    print("3. Try running the script with administrator privileges")
+    exit(1)
 
 # ---------- Spotify: Fetch Playlist Tracks ----------
 def fetch_spotify_tracks():
@@ -103,7 +129,9 @@ def download_with_doubledouble(tidal_url):
 
     # 2) Paste the Tidal URL into that input
     input_box.clear()
+    time.sleep(2)
     input_box.send_keys(tidal_url)
+    time.sleep(2)
 
     # 3) Click the button with ID dl-button
     download_btn = driver.find_element(By.ID, "dl-button")
