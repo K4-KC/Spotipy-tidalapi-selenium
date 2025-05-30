@@ -12,7 +12,7 @@ SPOTIFY_REDIRECT_URI  = os.getenv("SPOTIPY_REDIRECT_URI")
 SPOTIFY_SCOPE         = "playlist-read-private"
 
 # Paste your playlist link or ID here:
-raw_playlist = "https://open.spotify.com/playlist/0VZ0enNabwuwwHY2rfzSKv?si=01415048a90643e8"
+raw_playlist = "https://open.spotify.com/playlist/5epr9yWDpDeQ88iirjoEjG?si=27a32f8107b34cbd"
 PLAYLIST_ID = raw_playlist.split("?", 1)[0]
 
 # ── Spotify: Fetch Playlist Tracks ───────────────────────────────────
@@ -50,9 +50,10 @@ def find_tidal_track(session, title, artist):
     tracks = search.get("tracks", [])
     if not tracks:
         return None
-    tidal = tracks[0]
-    url = f"https://tidal.com/browse/track/{tidal.id}"
-    return tidal, url
+    for track in tracks:
+        if artist.lower() in track.artist.name.lower():
+            return track, f"https://tidal.com/browse/track/{track.id}"
+    return None
 
 # ── Main ──────────────────────────────────────────────────────────────
 def main():
@@ -95,11 +96,6 @@ def main():
         writer = csv.writer(f)
         writer.writerow(["Spotify Artist", "Tidal Artist", "Spotify Title", "Tidal Title", "Tidal URL"])
         writer.writerows(output_rows)
-
-    # write plain URLs for legacy scripts
-    with open("tidal_links.txt", "w", encoding="utf-8") as f:
-        for row in output_rows:
-            f.write(row[-1] + "\n")
 
     # write not-found
     with open("not_found_tracks.txt", "w", encoding="utf-8") as f:
