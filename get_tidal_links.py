@@ -1,101 +1,114 @@
 import os
+import csv
 import spotipy
-from spotipy.oauth2 import SpotifyOAuth
 import tidalapi
 import webbrowser
+from spotipy.oauth2 import SpotifyOAuth
 
-# ---------- Configuration ----------
-# Spotify credentials (set these as environment variables)
-SPOTIFY_CLIENT_ID = os.getenv("SPOTIPY_CLIENT_ID")
+# ── Configuration ────────────────────────────────────────────────────
+SPOTIFY_CLIENT_ID     = os.getenv("SPOTIPY_CLIENT_ID")
 SPOTIFY_CLIENT_SECRET = os.getenv("SPOTIPY_CLIENT_SECRET")
-SPOTIFY_REDIRECT_URI = os.getenv("SPOTIPY_REDIRECT_URI")
-SPOTIFY_SCOPE = "playlist-read-private"
+SPOTIFY_REDIRECT_URI  = os.getenv("SPOTIPY_REDIRECT_URI")
+SPOTIFY_SCOPE         = "playlist-read-private"
 
-# The Spotify playlist ID or URI (set as env var SPOTIFY_PLAYLIST_ID)
-# PLAYLIST_ID = os.getenv("SPOTIFY_PLAYLIST_ID")
-# suppose user pasted the share URL or ID+query
-raw = "https://open.spotify.com/playlist/0VZ0enNabwuwwHY2rfzSKv?si=01415048a90643e8"
-PLAYLIST_ID = raw.split("?", 1)[0]
+# Paste your playlist link or ID here:
+raw_playlist = "https://open.spotify.com/playlist/0VZ0enNabwuwwHY2rfzSKv?si=01415048a90643e8"
+PLAYLIST_ID = raw_playlist.split("?", 1)[0]
 
-# ---------- Spotify: Fetch Playlist Tracks ----------
+# ── Spotify: Fetch Playlist Tracks ───────────────────────────────────
 def fetch_spotify_tracks():
     sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
-        client_id=SPOTIFY_CLIENT_ID,
-        client_secret=SPOTIFY_CLIENT_SECRET,
-        redirect_uri=SPOTIFY_REDIRECT_URI,
-        scope=SPOTIFY_SCOPE
+        client_id     = SPOTIFY_CLIENT_ID,
+        client_secret = SPOTIFY_CLIENT_SECRET,
+        redirect_uri  = SPOTIFY_REDIRECT_URI,
+        scope         = SPOTIFY_SCOPE
     ))
-    tracks = []
+    all_tracks = []
     results = sp.playlist_tracks(PLAYLIST_ID)
-    tracks.extend(results['items'])
-    while results['next']:
+    all_tracks.extend(results["items"])
+    while results["next"]:
         results = sp.next(results)
-        tracks.extend(results['items'])
-    return tracks
+        all_tracks.extend(results["items"])
+    return all_tracks
 
-# ---------- Tidal: Login & Search ----------
+# ── Tidal: OAuth login & search ──────────────────────────────────────
 def login_tidal():
     session = tidalapi.Session()
-    # Initiate the OAuth login process
     login, future = session.login_oauth()
-    # Open the verification URL in the default web browser
     webbrowser.open(login.verification_uri_complete)
-    print(f"Please complete the login in your browser: {login.verification_uri_complete}")
-    # Wait for the user to complete the login
+    print(f"\n→ Complete Tidal login here: {login.verification_uri_complete}\n")
     future.result()
     if not session.check_login():
-        raise RuntimeError("TIDAL login failed")
+        raise RuntimeError("❌ Tidal OAuth failed")
+    print("✅ Logged into Tidal\n")
     return session
+
 
 def find_tidal_track(session, title, artist):
     query = f"{title} {artist}"
-    result = session.search(query, models=[tidalapi.Track])
-    tidal_tracks = result.get('tracks', [])
-    if tidal_tracks:
-        track = tidal_tracks[0]
-        return f"https://tidal.com/browse/track/{track.id}"
-    return None
+    search = session.search(query, models=[tidalapi.Track])
+    tracks = search.get("tracks", [])
+    if not tracks:
+        return None
+    tidal = tracks[0]
+    url = f"https://tidal.com/browse/track/{tidal.id}"
+    return tidal, url
 
-# ---------- Main Function ----------
+# ── Main ──────────────────────────────────────────────────────────────
 def main():
-    print("Fetching Spotify playlist tracks...")
-    spotify_tracks = fetch_spotify_tracks()
-    print(f"Found {len(spotify_tracks)} tracks in playlist")
-    
-    print("Logging into Tidal...")
+    print("🔍 Fetching Spotify playlist…")
+    spotify_items = fetch_spotify_tracks()
+    print(f"  ▶️  Found {len(spotify_items)} tracks\n")
+
     tidal_session = login_tidal()
-    
-    tidal_links = []
+
+    output_rows = []
     not_found = []
 
-    print("Searching for tracks on Tidal...")
-    for item in spotify_tracks:
-        track = item['track']
-        title = track['name']
-        artist = track['artists'][0]['name']
-        print(f"Processing: {title} – {artist}")
+    print("🔍 Searching on Tidal…")
+    for item in spotify_items:
+        sp_track = item["track"]
+        sp_title  = sp_track["name"]
+        sp_artist = sp_track["artists"][0]["name"]
+        print(f"• {sp_title} — {sp_artist}", end="  ")
 
-        tidal_url = find_tidal_track(tidal_session, title, artist)
-        if tidal_url:
-            print(f"  Found on Tidal: {tidal_url}")
-            tidal_links.append(tidal_url)
+        result = find_tidal_track(tidal_session, sp_title, sp_artist)
+        if result:
+            tidal_track, tidal_url = result
+            td_title  = tidal_track.name
+            td_artist = tidal_track.artist.name
+            print(f"→ {td_title} — {td_artist}")
+            # collect row data
+            output_rows.append([
+                sp_artist,
+                td_artist,
+                sp_title,
+                td_title,
+                tidal_url
+            ])
         else:
-            print(f"  Not found on Tidal. Logging.")
-            not_found.append(f"{title} – {artist}")
+            print("→ ❌ Not found")
+            not_found.append(f"{sp_title} — {sp_artist}")
 
-    # Save tidal links to file
+    # write the full info CSV
+    with open("tidal_links.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Spotify Artist", "Tidal Artist", "Spotify Title", "Tidal Title", "Tidal URL"])
+        writer.writerows(output_rows)
+
+    # write plain URLs for legacy scripts
     with open("tidal_links.txt", "w", encoding="utf-8") as f:
-        for link in tidal_links:
-            f.write(link + "\n")
+        for row in output_rows:
+            f.write(row[-1] + "\n")
 
-    # Save not found tracks to file
+    # write not-found
     with open("not_found_tracks.txt", "w", encoding="utf-8") as f:
-        for entry in not_found:
-            f.write(entry + "\n")
+        f.write("\n".join(not_found))
 
-    print(f"\nDone! Found {len(tidal_links)} tracks on Tidal.")
-    print(f"Tidal links saved to: tidal_links.txt")
-    print(f"Not found tracks saved to: not_found_tracks.txt")
+    print(f"\n✅ Done!  {len(output_rows)} found, {len(not_found)} missing.")
+    print(" • Full info → tidal_links.csv")
+    print(" • URLs only  → tidal_links.txt")
+    print(" • Missing    → not_found_tracks.txt")
 
 if __name__ == "__main__":
     main()

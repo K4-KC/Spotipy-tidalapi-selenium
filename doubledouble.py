@@ -1,5 +1,6 @@
 import pyautogui
 import time
+import csv
 
 # -- Setup: optional PyAutoGUI settings --
 pyautogui.PAUSE = 0.5   # pause after each PyAutoGUI call for safety
@@ -47,13 +48,27 @@ error_color = (255, 0, 0)  # red color in RGB
 print(f"Error position at {error_pos}")
 
 # Load Tidal song URLs from file
-def load_tidal_links(filename="tidal_links.txt"):
+def load_tidal_links(filename="tidal_links.csv"):
+    """
+    Load Tidal track URLs from a CSV file with a header row.
+    Assumes the CSV contains a column named 'Tidal URL'.
+
+    :param filename: Path to the CSV file.
+    :return: List of URLs (strings). Returns an empty list on error.
+    """
     try:
-        with open(filename, "r", encoding="utf-8") as f:
-            links = [line.strip() for line in f if line.strip()]
+        with open(filename, newline='', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            links = [row['Tidal URL'].strip() for row in reader if row.get('Tidal URL')]
         return links
     except FileNotFoundError:
-        print(f"Error: {filename} not found. Please run get_tidal_links.py first to generate the links.")
+        print(f"Error: {filename} not found. Please generate the CSV first.")
+        return []
+    except KeyError:
+        print(f"Error: 'Tidal URL' column not found in {filename}.")
+        return []
+    except Exception as e:
+        print(f"Error loading links from {filename}: {e}")
         return []
 
 tidal_links = load_tidal_links()
